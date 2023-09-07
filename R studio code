@@ -1,0 +1,239 @@
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(dplyr)
+library(tidyr)
+
+# Load and prepare your data
+file_path <- "C:/Users/Adith/Desktop/final_balanced_df.csv"
+final_balanced_df <- read.csv(file_path)
+
+file_path <- "C:/Users/Adith/Desktop/cleaned_shoe_data.csv"
+cleaned_shoe_data <- read.csv(file_path)
+
+# Convert Sex to a factor variable
+final_balanced_df$Sex <- as.factor(final_balanced_df$Sex)
+
+# Set the seed for reproducibility
+set.seed(123)
+
+# Train the classification tree model
+fit <- rpart(Sex ~ Average.Foot.Length + Average.BAB + Average.BAB.index + 
+               Average.BAH + Average.BAH.index, 
+             data = final_balanced_df, method = "class")
+
+# Predict the Sex on the training data
+predicted_sex_train <- predict(fit, final_balanced_df, type = "class")
+
+# Confusion matrix
+conf_mat <- confusionMatrix(predicted_sex_train, final_balanced_df$Sex)
+print(conf_mat)
+
+# Plot the decision tree
+rpart.plot(fit, type = 3, extra = 1)
+
+# Assuming cleaned_shoe_data is already loaded in your workspace
+cleaned_shoe_data <- cleaned_shoe_data %>%
+  dplyr::rename(
+    Average.Foot.Length = INSOLE.LENGTH,
+    Average.BAB = INSOLE.BAB,
+    Average.BAB.index = BAB.INDEX,
+    Average.BAH = INSOLE.BAH,
+    Average.BAH.index = BAH.INDEX
+  )
+
+test_set <- cleaned_shoe_data[!is.na(cleaned_shoe_data$POSSIBLE.OWNER..SEX.), ]
+
+predicted_sex_test <- predict(fit, newdata = test_set, type = "class")
+
+levels(test_set$POSSIBLE.OWNER..SEX.)
+
+
+levels(predicted_sex_test)
+
+test_set$POSSIBLE.OWNER..SEX. <- factor(test_set$POSSIBLE.OWNER..SEX., levels = levels(final_balanced_df$Sex))
+
+
+conf_mat_test <- confusionMatrix(predicted_sex_test, test_set$POSSIBLE.OWNER..SEX.)
+print(conf_mat_test)
+
+
+# Load necessary libraries
+library(caret)
+
+# Set up cross-validation
+control <- trainControl(method="cv", number=5) # 10-fold CV
+
+# Train the model using cross-validation
+cv_model <- train(
+  Sex ~ Average.Foot.Length + Average.BAB + Average.BAB.index + Average.BAH + Average.BAH.index, 
+  data = final_balanced_df, 
+  method = "rpart",
+  trControl = control
+)
+
+# Display results
+print(cv_model)
+
+
+# Prune the tree with the optimal cp
+pruned_tree <- prune(cv_model$finalModel, cp =  0.09)
+
+# Plot the pruned tree
+rpart.plot(pruned_tree, type = 3, extra = 1)
+
+# Predict using the pruned tree on shoe dataset
+predictions <- predict(pruned_tree, newdata = cleaned_shoe_data, type = "class")
+
+# Ensure factor levels match
+cleaned_shoe_data$Predicted_Sex <- factor(predictions, levels = levels(final_balanced_df$Sex))
+known_sex_shoes <- cleaned_shoe_data[!is.na(cleaned_shoe_data$POSSIBLE.OWNER..SEX.), ]
+known_sex_shoes$POSSIBLE.OWNER..SEX. <- factor(known_sex_shoes$POSSIBLE.OWNER..SEX., levels = levels(final_balanced_df$Sex))
+
+# Calculate the confusion matrix
+conf_mat <- confusionMatrix(known_sex_shoes$Predicted_Sex, known_sex_shoes$POSSIBLE.OWNER..SEX.)
+print(conf_mat)
+
+
+############Random forest##########
+library(randomForest)
+
+
+set.seed(124)  # Setting seed for reproducibility
+
+# Training random forest on foot data
+known_sex_shoes_rf <- cleaned_shoe_data[!is.na(cleaned_shoe_data$POSSIBLE.OWNER..SEX.), ]
+filtered_data <- known_sex_shoes_rf[!is.na(known_sex_shoes_rf$POSSIBLE.OWNER..SEX.), ]
+
+rf_model <- randomForest(Sex ~ Average.Foot.Length + Average.BAB + Average.BAB.index + 
+                           Average.BAH + Average.BAH.index, 
+                         data=final_balanced_df, ntree=100)
+
+print(rf_model)  # Print the model summary
+
+
+rf_predictions <- predict(rf_model, newdata=filtered_data, type="class")
+
+# Confusion matrix for RF predictions
+conf_mat_rf <- confusionMatrix(rf_predictions, filtered_data$POSSIBLE.OWNER..SEX.)
+print(conf_mat_rf)
+
+colnames(cleaned_shoe_data)
+colnames(final_balanced_df)
+
+#####XG BOOST####
+
+library(xgboost)
+
+# XGBoost Model
+train_data <- as.matrix(final_balanced_df[, -which(names(final_balanced_df) == "Sex")])
+train_labels <- as.numeric(final_balanced_df$Sex) - 1  # Convert to 0 and 1
+
+test_data <- as.matrix(test_set[, -which(names(test_set) == "POSSIBLE.OWNER..SEX.")])
+
+bst_model <- xgboost(data = train_data, label = train_labels, nrounds = 100, objective = "binary:logistic", eval_metric = "error")
+
+colnames(test_data) <- bst_model$feature_names
+
+xgb_predictions_numeric <- predict(bst_model, newdata = test_data)
+
+xgb_predictions <- as.factor(xgb_predictions)
+test_set$POSSIBLE.OWNER..SEX. <- as.factor(test_set$POSSIBLE.OWNER..SEX.)
+
+# Ensure the levels are the same for both factors
+levels(xgb_predictions) <- levels(test_set$POSSIBLE.OWNER..SEX.)
+
+conf_mat_xgb <- confusionMatrix(xgb_predictions, test_set$POSSIBLE.OWNER..SEX.)
+print(conf_mat_xgb)
+
+
+
+
+# Plot for Regular Tree
+rpart.plot(fit, type = 3, extra = 1, main = "Regular Decision Tree")
+
+# Plot for Pruned Tree
+rpart.plot(pruned_tree, type = 3, extra = 1, main = "Pruned Decision Tree")
+
+
+importance(rf_model)  # This prints the importance
+varImpPlot(rf_model, main="Random Forest Variable Importance")
+
+
+importance_matrix <- xgb.importance(model = bst_model)
+xgb.plot.importance(importance_matrix, main = "XGBoost Feature Importance")
+
+
+# Extract accuracies from the confusion matrices
+tree_accuracy <- conf_mat_test$overall['Accuracy']
+pruned_tree_accuracy <- conf_mat_test_pruned$overall['Accuracy']
+rf_accuracy <- conf_mat_rf$overall['Accuracy']
+xgb_accuracy <- conf_mat_xgb$overall['Accuracy']
+
+# Place accuracies in a named vector
+all_accuracies <- c(
+  Tree = tree_accuracy,
+  PrunedTree = pruned_tree_accuracy,
+  RandomForest = rf_accuracy,
+  XGBoost = xgb_accuracy
+)
+
+# Determine which model has the best accuracy
+best_model <- which.max(all_accuracies)
+
+# Print the best model and its accuracy
+cat("The best model is:", names(best_model), "with an accuracy of:", all_accuracies[best_model], "\n")
+
+
+# Plotting the accuracies
+barplot(
+  all_accuracies,
+  main = "Model Testing Accuracies",
+  col = c("red", "blue", "green", "purple"),
+  ylim = c(0, 1),  # Assuming accuracy is between 0 and 1 (0% to 100%)
+  ylab = "Accuracy",
+  xlab = "Model",
+  names.arg = rep("", length(all_accuracies))  # Remove x-axis names
+)
+
+# Add the accuracy value on top of each bar for clarity
+text(1:length(all_accuracies), all_accuracies + 0.02, labels = round(all_accuracies, 3), pos = 3)
+
+# Add legend to the bar chart
+legend(
+  "topright", 
+  legend = c("Decision Tree", "Pruned Tree", "Random Forest", "XGBoost"), 
+  fill = c("red", "blue", "green", "purple")
+)
+
+
+
+######VIZUALZZ########
+
+plotcp(cv_model$finalModel)
+title("Tree Complexity Plot for Decision Trees")
+
+
+importance_plot <- importance(rf_model)
+barplot(importance_plot[,1], las=2, main="Random Forest Variable Importance", col="steelblue", names.arg=row.names(importance_plot))
+
+plot(rf_model$err.rate[, 1], type="l", main="OOB Error Rate Across Trees", ylab="OOB Error Rate", xlab="Number of Trees")
+
+importance_matrix <- xgb.importance(model = bst_model)
+xgb.plot.importance(importance_matrix, main = "Feature importance for XGBoost")
+
+train_error <- bst_model$evaluation_log$train_error
+plot(1:length(train_error), train_error, type="l", main="XGBoost Learning Curve", ylab="Training Error", xlab="Number of Trees")
+
+
+
+
+
+
+
+
+
+
+
+
+
