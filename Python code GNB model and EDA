@@ -68,7 +68,7 @@ def perform_paired_t_test(group_data, description):
         print(f"{left} vs {right} - t-statistic: {t_statistic}, p-value: {p_value}")
     print()
 
-# Perform the paired t-tests for both males and females
+#  paired t-tests for both males and females
 perform_paired_t_test(eu_male_data, "males")
 perform_paired_t_test(eu_female_data, "females")
 
@@ -93,7 +93,6 @@ if 'Sex' in cleaned_eu_df.columns:
 if 'Age' in cleaned_eu_df.columns:
     eu_averaged_columns.append('Age')
 
-# Select and print only the averaged columns
 eu_averaged_columns_df = averaged_eu_df[eu_averaged_columns]
 print(eu_averaged_columns_df)
 
@@ -149,7 +148,6 @@ def plot_density(eu_averaged, gh_averaged, columns):
         else:
             print(f"Column {column} not found in one of the DataFrames")
 
-    # Remove any empty subplots
     for idx in range(num_plots, 5*3):
         row = idx // 3
         col = idx % 3
@@ -158,7 +156,6 @@ def plot_density(eu_averaged, gh_averaged, columns):
     plt.tight_layout()
     plt.show()
 
-# Specify the columns you want to plot
 columns_to_plot = [
     "Average Foot Length",
     "Average BAB",
@@ -167,7 +164,6 @@ columns_to_plot = [
     "Average BAH index"
 ]
 
-# Call the function with the two DataFrames and the list of columns
 plot_density(eu_averaged, gh_averaged, columns_to_plot)
 
 print("Summary Statistics for Europeans:")
