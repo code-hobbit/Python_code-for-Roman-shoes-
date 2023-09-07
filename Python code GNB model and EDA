@@ -1,0 +1,817 @@
+from tabulate import tabulate
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pgmpy as pg
+import pandas as pd
+import numpy as np
+import os
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, roc_curve
+from scipy.stats import ttest_rel
+from scipy import stats
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.model_selection import cross_val_score
+
+
+gh_df = pd.read_csv("ghanadata.csv",sep=",",header=0)
+gh_df .head()
+gh_df.shape
+eu_df = pd.read_csv("eudata.csv",sep=",",header=0)
+eu_df .head()
+
+cleaned_eu_df = eu_df.dropna()
+cleaned_gh_df = gh_df.dropna()
+cleaned_eu_df.shape
+#removed all the rows with missing values. Data frome dropped from 288 to 236.
+#52 rows have been eliminated.
+
+cleaned_gh_df.shape
+#No null values
+
+#Checking max age in Eu data
+
+max_age_row = cleaned_eu_df[cleaned_eu_df['Age'] == cleaned_eu_df['Age'].max()]
+print("The maximum age in the dataset is:", max_age_row['Age'].values[0])
+print("The sex corresponding to the maximum age is:", max_age_row['Sex'].values[0])
+
+#Checking max age in Gh data
+
+gh_max_age_row = cleaned_gh_df[cleaned_gh_df['Age'] == cleaned_gh_df['Age'].max()]
+print("The maximum age in Ghanian data dataset is:", gh_max_age_row['Age'].values[0])
+print("The sex corresponding to the maximum age is:", gh_max_age_row['Sex'].values[0])
+
+
+#Paired t - test 
+
+eu_male_data = cleaned_eu_df[cleaned_eu_df['Sex'] == 'M']
+eu_female_data = cleaned_eu_df[cleaned_eu_df['Sex'] == 'F']
+
+def perform_paired_t_test(group_data, description):
+    pairs = [
+        ('Left Foot Length', 'Right Foot Length'),
+        ('Left BAB', 'Right BAB'),
+        ('Left BAH', 'Right BAH'),
+        ('Left BAB index', 'Right BAB index'),
+        ('Left BAH index', 'Right BAH index')
+    ]
+    
+    print(f"paired t-tests for European {description}:")
+    for left, right in pairs:
+        diff = group_data[left] - group_data[right]
+        t_statistic = np.mean(diff) / (np.std(diff, ddof=1) / np.sqrt(len(diff)))
+        degrees_of_freedom = len(diff) - 1
+        p_value = (1 - stats.t.cdf(np.abs(t_statistic), degrees_of_freedom)) * 2
+        print(f"{left} vs {right} - t-statistic: {t_statistic}, p-value: {p_value}")
+    print()
+
+# Perform the paired t-tests for both males and females
+perform_paired_t_test(eu_male_data, "males")
+perform_paired_t_test(eu_female_data, "females")
+
+###Averaging both the columns###
+
+eu_averaged_columns = [] 
+
+averaged_eu_df = cleaned_eu_df.copy()
+for base_measurement in ['Foot Length', 'BAB', 'BAH', 'BAB index', 'BAH index']:
+    left_column = 'Left ' + base_measurement
+    right_column = 'Right ' + base_measurement
+
+    if left_column in averaged_eu_df.columns and right_column in averaged_eu_df.columns:
+        
+        avg_column = 'Average ' + base_measurement
+        averaged_eu_df[avg_column] = (averaged_eu_df[left_column] + averaged_eu_df[right_column]) / 2
+        eu_averaged_columns.append(avg_column)
+
+if 'Sex' in cleaned_eu_df.columns:
+    eu_averaged_columns.append('Sex')
+
+if 'Age' in cleaned_eu_df.columns:
+    eu_averaged_columns.append('Age')
+
+# Select and print only the averaged columns
+eu_averaged_columns_df = averaged_eu_df[eu_averaged_columns]
+print(eu_averaged_columns_df)
+
+
+gh_averaged_columns = [] # List to store the names of the averaged columns
+
+averaged_gh_df = cleaned_gh_df.copy()
+
+for base_measurement in ['Foot Length', 'BAB', 'BAH', 'BAB index', 'BAH index']:
+    left_column = 'Left ' + base_measurement
+    right_column = 'Right ' + base_measurement
+
+    if left_column in averaged_gh_df.columns and right_column in averaged_gh_df.columns:
+        
+        gh_avg_column = 'Average ' + base_measurement
+        averaged_gh_df[gh_avg_column] = (averaged_gh_df[left_column] + averaged_gh_df[right_column]) / 2
+        gh_averaged_columns.append(gh_avg_column)
+
+if 'Sex' in cleaned_gh_df.columns:
+    gh_averaged_columns.append('Sex')
+
+if 'Age' in cleaned_gh_df.columns:
+    gh_averaged_columns.append('Age')
+
+gh_averaged_columns_df = averaged_gh_df[gh_averaged_columns]
+print(gh_averaged_columns_df)
+
+#########comparing the avergae of European population to Ghaninan##########
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def plot_density(eu_averaged, gh_averaged, columns):
+    num_plots = len(columns)
+    fig, axes = plt.subplots(nrows=5, ncols=3, figsize=(15, 20))
+
+    for idx, column in enumerate(columns):
+        if column in eu_averaged.columns and column in gh_averaged.columns:
+            row = idx // 3  # Calculate the row index
+            col = idx % 3   # Calculate the column index
+
+            # Plot kernel density for Europeans
+            sns.kdeplot(eu_averaged[column], shade=True, label='Europeans', ax=axes[row, col])
+
+            # Plot kernel density for Ghanaians
+            sns.kdeplot(gh_averaged[column], shade=True, label='Ghanaians', ax=axes[row, col])
+
+            axes[row, col].set_title(f'Kernel Density Plot of {column}')
+            axes[row, col].set_xlabel(column)
+            axes[row, col].set_ylabel('Density')
+            axes[row, col].legend()
+        else:
+            print(f"Column {column} not found in one of the DataFrames")
+
+    # Remove any empty subplots
+    for idx in range(num_plots, 5*3):
+        row = idx // 3
+        col = idx % 3
+        fig.delaxes(axes[row, col])
+
+    plt.tight_layout()
+    plt.show()
+
+# Specify the columns you want to plot
+columns_to_plot = [
+    "Average Foot Length",
+    "Average BAB",
+    "Average BAH",
+    "Average BAB index",
+    "Average BAH index"
+]
+
+# Call the function with the two DataFrames and the list of columns
+plot_density(eu_averaged, gh_averaged, columns_to_plot)
+
+print("Summary Statistics for Europeans:")
+print(eu_summary)
+
+print("\nSummary Statistics for Ghanaians:")
+print(gh_summary)
+
+#######################Comparing both datasets ##########################
+
+columns_to_compare = [
+    "Average Foot Length",
+    "Average BAB",
+    "Average BAH",
+    "Average BAB index",
+    "Average BAH index"
+]
+
+# Function to compare two datasets
+def compare_datasets(eu_averaged, gh_averaged, columns):
+    results = {}
+    for column in columns:
+        eu_column = eu_averaged[column]
+        gh_column = gh_averaged[column]
+        
+        results[column] = {
+            'eu_mean': eu_column.mean(),
+            'gh_mean': gh_column.mean(),
+            'eu_std': eu_column.std(),
+            'gh_std': gh_column.std(),
+            
+            # T-test
+            't_test': stats.ttest_ind(eu_column, gh_column)
+        }
+    return results
+
+comparison_results = compare_datasets(eu_averaged, gh_averaged, columns_to_compare)
+for column, result in comparison_results.items():
+    print(f"Comparison for {column}:")
+    print(f"  Mean (EU): {result['eu_mean']}")
+    print(f"  Mean (GH): {result['gh_mean']}")
+    
+    print(f"  Standard Deviation (EU): {result['eu_std']}")
+    print(f"  Standard Deviation (GH): {result['gh_std']}")
+    
+    print(f"  T-Test: {result['t_test']}")
+    print()
+
+
+##################Shapio wilk's test########################
+
+columns_to_test = [
+    "Average Foot Length",
+    "Average BAB",
+    "Average BAH",
+    "Average BAB index",
+    "Average BAH index",
+]
+
+for column in columns_to_test:
+    shapiro_test = stats.shapiro(full_foot_df[column])
+    print(f'{column}: W-statistic = {shapiro_test[0]}, p-value = {shapiro_test[1]}')
+
+
+#####QQ Plots#########
+
+columns_to_plot = [
+    "Average Foot Length",
+    "Average BAB",
+    "Average BAH",
+    "Average BAB index",
+    "Average BAH index",
+]
+
+for column in columns_to_plot:
+    plt.figure(figsize=(12, 6))
+
+    stats.probplot(full_foot_df[column], dist="norm", plot=plt.subplot(121))
+    plt.title(f'{column} in full_foot_df')
+
+    stats.probplot(outremoved_df[column], dist="norm", plot=plt.subplot(122))
+    plt.title(f'{column} in outremoved_df')
+
+    plt.show()
+
+
+shoe_df['INSOLE LENGTH'] = pd.to_numeric(shoe_df['INSOLE LENGTH'], errors='coerce')
+shoe_df['INSOLE BAB'] = pd.to_numeric(shoe_df['INSOLE BAB'], errors='coerce')
+shoe_df['INSOLE BAH'] = pd.to_numeric(shoe_df['INSOLE BAH'], errors='coerce')
+shoe_df['BAB INDEX'] = pd.to_numeric(shoe_df['BAB INDEX'], errors='coerce')
+shoe_df['BAH INDEX'] = pd.to_numeric(shoe_df['BAH INDEX'], errors='coerce')
+
+columns_to_convert = ['INSOLE LENGTH', 'INSOLE BAB', 'INSOLE BAH', 'BAB INDEX', 'BAH INDEX']
+
+for column in columns_to_convert:
+    shoe_df[column] = shoe_df[column].astype(float)
+
+print(shoe_df.dtypes)
+
+
+
+#####Density plots between shoe and foot######
+
+attribute_map = {
+    "Average Foot Length": "INSOLE LENGTH",
+    "Average BAB": "INSOLE BAB",
+    "Average BAH": "INSOLE BAH",
+    "Average BAB index": "BAB INDEX",
+    "Average BAH index": "BAH INDEX"
+}
+
+fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(12, 8))  # Adjusted figsize
+
+plot_positions = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1)]
+for (row, col), (full_foot_attribute, cleaned_shoe_attribute) in zip(plot_positions, attribute_map.items()):
+    sns.kdeplot(full_foot_df[full_foot_attribute], label='Footprint Dataset', ax=axes[row, col], shade=True)
+    
+    sns.kdeplot(cleaned_shoe_data[cleaned_shoe_attribute], label='Shoe Dataset', ax=axes[row, col], shade=True)
+    
+    axes[row, col].legend()
+    axes[row, col].set_title(f"Distribution of {full_foot_attribute}")
+
+axes[1, 2].axis('off')
+
+plt.tight_layout()
+plt.savefig("combined_distributions_grid.png")
+plt.show()
+
+
+#############IQR Test########################
+
+
+# Male IQR for Average Foot Length
+Q1_M_FL = male_filtered['Average Foot Length'].quantile(0.25)
+Q3_M_FL = male_filtered['Average Foot Length'].quantile(0.75)
+IQR_M_FL = Q3_M_FL - Q1_M_FL
+
+lower_bound_M_FL = Q1_M_FL - 1.5 * IQR_M_FL
+upper_bound_M_FL = Q3_M_FL + 1.5 * IQR_M_FL
+
+male_data_filtered_FL = male_filtered[(male_filtered['Average Foot Length'] >= lower_bound_M_FL) & 
+                                      (male_filtered['Average Foot Length'] <= upper_bound_M_FL)]
+
+# Female IQR for Average Foot Length
+Q1_F_FL = female_filtered['Average Foot Length'].quantile(0.25)
+Q3_F_FL = female_filtered['Average Foot Length'].quantile(0.75)
+IQR_F_FL = Q3_F_FL - Q1_F_FL
+
+lower_bound_F_FL = Q1_F_FL - 1.5 * IQR_F_FL
+upper_bound_F_FL = Q3_F_FL + 1.5 * IQR_F_FL
+
+female_data_filtered_FL = female_filtered[(female_filtered['Average Foot Length'] >= lower_bound_F_FL) & 
+                                          (female_filtered['Average Foot Length'] <= upper_bound_F_FL)]
+
+
+
+# Male IQR for Average BAB
+Q1_M_BAB = 90.5
+Q3_M_BAB = 98.0
+IQR_M_BAB = Q3_M_BAB - Q1_M_BAB
+
+# Female IQR for Average BAB
+Q1_F_BAB = 80.5
+Q3_F_BAB = 89.5
+IQR_F_BAB = Q3_F_BAB - Q1_F_BAB
+
+lower_bound_M_BAB = Q1_M_BAB - 1.5 * IQR_M_BAB
+upper_bound_M_BAB = Q3_M_BAB + 1.5 * IQR_M_BAB
+
+lower_bound_F_BAB = Q1_F_BAB - 1.5 * IQR_F_BAB
+upper_bound_F_BAB = Q3_F_BAB + 1.5 * IQR_F_BAB
+
+male_data_filtered_BAB =  trimmed_foot_df[( trimmed_foot_df['Sex'] == 'M') & ( trimmed_foot_df['Average BAB'] >= lower_bound_M_BAB) & ( trimmed_foot_df['Average BAB'] <= upper_bound_M_BAB)]
+female_data_filtered_BAB =  trimmed_foot_df[( trimmed_foot_df['Sex'] == 'F') & ( trimmed_foot_df['Average BAB'] >= lower_bound_F_BAB) & ( trimmed_foot_df['Average BAB'] <= upper_bound_F_BAB)]
+
+
+# Male IQR for Average BAH
+Q1_M_BAH = 49.0
+Q3_M_BAH = 56.0 
+IQR_M_BAH = Q3_M_BAH - Q1_M_BAH
+
+# Female IQR for Average BAH
+Q1_F_BAH = 42.5
+Q3_F_BAH = 50.5
+IQR_F_BAH = Q3_F_BAH - Q1_F_BAH
+
+lower_bound_M_BAH = Q1_M_BAH - 1.5 * IQR_M_BAH
+upper_bound_M_BAH = Q3_M_BAH + 1.5 * IQR_M_BAH
+
+lower_bound_F_BAH = Q1_F_BAH - 1.5 * IQR_F_BAH
+upper_bound_F_BAH = Q3_F_BAH + 1.5 * IQR_F_BAH
+
+male_data_filtered_BAH = male_data_filtered_BAB[(male_data_filtered_BAB['Average BAH'] >= lower_bound_M_BAH) & (male_data_filtered_BAB['Average BAH'] <= upper_bound_M_BAH)]
+female_data_filtered_BAH = female_data_filtered_BAB[(female_data_filtered_BAB['Average BAH'] >= lower_bound_F_BAH) & (female_data_filtered_BAB['Average BAH'] <= upper_bound_F_BAH)]
+
+# Determine which dataset is shorter
+min_length = min(len(male_filtered), len(female_filtered))
+
+male_balanced = male_filtered.sample(n=min_length)
+female_balanced = female_filtered.sample(n=min_length)
+
+balanced_df = pd.concat([male_balanced, female_balanced])
+
+
+male_filtered = trimmed_foot_df[(trimmed_foot_df['Sex'] == 'M') & 
+                                (trimmed_foot_df['Average Foot Length'] <= 262)]
+
+female_filtered = trimmed_foot_df[(trimmed_foot_df['Sex'] == 'F') & 
+                                  (trimmed_foot_df['Average Foot Length'] >= 218.5)]
+
+
+min_size = min(len(male_data_filtered_BAH), len(female_data_filtered_BAH))
+
+balanced_male_data = male_data_filtered_BAH.sample(min_size, replace=False, random_state=42)
+balanced_female_data = female_data_filtered_BAH.sample(min_size, replace=False, random_state=42)
+
+final_balanced_df = pd.concat([balanced_male_data, balanced_female_data])
+
+
+def trim_extremes(df, gender, column, n_low=5, n_high=5):
+  
+    if gender == 'M':
+        indices_to_drop = df[df['Sex'] == gender].nlargest(n_high, column).index
+    else:
+        indices_to_drop = df[df['Sex'] == gender].nsmallest(n_low, column).index
+    
+    df = df.drop(indices_to_drop)
+    return df
+
+final_balanced_df = trim_extremes(final_balanced_df, 'M', 'Average Foot Length', n_low=0, n_high=5)
+final_balanced_df = trim_extremes(final_balanced_df, 'F', 'Average Foot Length', n_low=5, n_high=0)
+
+
+##### Box plots#####
+
+sns.set(style="whitegrid")
+
+# Define the columns you want to plot
+numerical_columns = ['Average Foot Length', 'Average BAB', 'Average BAH', 'Average BAB index', 'Average BAH index']
+
+# Create a boxplot for each column
+plt.figure(figsize=(15, 10))
+
+for idx, column in enumerate(numerical_columns, 1):
+    plt.subplot(2, 3, idx)  # 2 rows, 3 columns per row
+    sns.boxplot(x="Sex", y=column, data=final_balanced_df)
+    plt.title(f'Boxplot of {column}')
+    plt.tight_layout()
+
+plt.show()
+
+#### Identifying outliers####
+
+import pandas as pd
+
+def identify_outliers(df, column):
+  
+    Q1 = df[column].quantile(0.25)
+    Q3 = df[column].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    outlier_indices = df[(df[column] < lower_bound) | (df[column] > upper_bound)].index
+    return outlier_indices
+
+columns_to_check = ['Average Foot Length', 'Average BAB', 'Average BAH', 'Average BAB index', 'Average BAH index']
+
+male_outliers = {}
+female_outliers = {}
+
+for column in columns_to_check:
+    male_outliers[column] = identify_outliers(final_balanced_df[final_balanced_df['Sex'] == 'M'], column)
+    female_outliers[column] = identify_outliers(final_balanced_df[final_balanced_df['Sex'] == 'F'], column)
+
+print("Male Outliers:")
+for key, value in male_outliers.items():
+    print(f"{key}: {len(value)} outliers")
+
+print("\nFemale Outliers:")
+for key, value in female_outliers.items():
+    print(f"{key}: {len(value)} outliers")
+
+
+###########simple linear regression model with and without outliers########
+
+
+
+
+X = final_balanced_df[columns_to_check].drop(columns='Average BAB index')
+y = final_balanced_df['Average BAB index']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = LinearRegression()
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+print(f"R-squared with outliers: {r2_score(y_test, y_pred)}")
+
+# Without outliers
+X_filtered = filtered_df[columns_to_check].drop(columns='Average BAB index')
+y_filtered = filtered_df['Average BAB index']
+X_train_filtered, X_test_filtered, y_train_filtered, y_test_filtered = train_test_split(X_filtered, y_filtered, test_size=0.2, random_state=42)
+
+model.fit(X_train_filtered, y_train_filtered)
+y_pred_filtered = model.predict(X_test_filtered)
+print(f"R-squared without outliers: {r2_score(y_test_filtered, y_pred_filtered)}")
+
+
+#####Box- cox method###########
+
+foot_length_data = final_balanced_df['Average Foot Length']
+
+stat, p = shapiro(foot_length_data)
+print("Statistics=%.3f, p=%.3f" % (stat, p))
+if p > 0.05:
+    print("Data follows a normal distribution (fail to reject H0)")
+else:
+    print("Data does not follow a normal distribution (reject H0)")
+
+transformed_foot_length, _ = boxcox(foot_length_data)
+
+stat, p = shapiro(transformed_foot_length)
+print("Statistics=%.3f, p=%.3f" % (stat, p))
+if p > 0.05:
+    print("Transformed data follows a normal distribution (fail to reject H0)")
+else:
+    print("Transformed data does not follow a normal distribution (reject H0)")
+
+plt.figure(figsize=(10, 5))
+
+plt.subplot(1, 2, 1)
+plt.hist(foot_length_data, bins=20, color='blue', alpha=0.7)
+plt.title('Original Data Distribution')
+
+plt.subplot(1, 2, 2)
+plt.hist(transformed_foot_length, bins=20, color='green', alpha=0.7)
+plt.title('Transformed Data Distribution')
+
+plt.tight_layout()
+plt.show()
+
+#####Correlation matrix###
+
+correlation_matrix = final_balanced_df[num_vars].corr()
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm')
+plt.title('Correlation Matrix')
+plt.show()
+
+####Correlation matrix by sex####
+
+male_data = final_balanced_df[final_balanced_df['Sex'] == 'M'].drop(columns=['Sex'])
+female_data = final_balanced_df[final_balanced_df['Sex'] == 'F'].drop(columns=['Sex'])
+
+male_corr = male_data.corr()
+female_corr = female_data.corr()
+
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+sns.heatmap(male_corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+plt.title('Correlation Matrix for Males')
+
+plt.subplot(1, 2, 2)
+sns.heatmap(female_corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+plt.title('Correlation Matrix for Females')
+plt.tight_layout()
+plt.show()
+
+###Pairplot#####
+
+sns.pairplot(final_balanced_df, hue='Sex')
+
+########Density plots######
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Mapping between the columns in final_balanced_df and cleaned_shoe_data
+column_mapping = {
+    "Average Foot Length": "INSOLE LENGTH",
+    "Average BAB": "INSOLE BAB",
+    "Average BAH": "INSOLE BAH",
+    "Average BAB index": "BAB INDEX",
+    "Average BAH index": "BAH INDEX"
+}
+
+# Creating a figure with 2 rows and 3 columns
+fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+axes = axes.flatten()
+
+for i, (feature_balanced, feature_shoe) in enumerate(column_mapping.items()):
+    sns.kdeplot(final_balanced_df[feature_balanced], label='Final Balanced Data', shade=True, ax=axes[i])
+    sns.kdeplot(cleaned_shoe_data[feature_shoe], label='Cleaned Shoe Data', shade=True, ax=axes[i])
+    
+    axes[i].set_title(f'Density Plot comparing {feature_balanced} and {feature_shoe}')
+    axes[i].set_xlabel('Value')
+    axes[i].set_ylabel('Density')
+    axes[i].legend(loc='upper right')
+
+axes[-1].axis("off")
+plt.tight_layout()
+plt.show()
+
+#####################Model Training####################
+
+
+# Data Pre-processing
+# Map columns from the training set to the testing set
+column_mapping = {
+    "Average Foot Length": "INSOLE LENGTH",
+    "Average BAH": "INSOLE BAH",
+    "Average BAH index": "BAH INDEX"
+}
+
+final_balanced_df = final_balanced_df.rename(columns=column_mapping)
+X_train = final_balanced_df[["INSOLE LENGTH", "INSOLE BAH", "BAH INDEX"]]
+y_train = final_balanced_df["Sex"]
+X_test = cleaned_shoe_data[["INSOLE LENGTH", "INSOLE BAH", "BAH INDEX"]]
+
+# Scaling the Data
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Training the Gaussian Naive Bayes Model
+gnb = GaussianNB()
+
+#Evaluating the Model on Training Data
+y_train_pred = gnb.predict(X_train_scaled)
+train_accuracy = accuracy_score(y_train, y_train_pred)
+print(f"Training Accuracy: {train_accuracy:.2f}")
+
+# Calculate precision, recall, and F1-score for training data
+train_precision = precision_score(y_train, y_train_pred, pos_label='M')
+train_recall = recall_score(y_train, y_train_pred, pos_label='M')
+train_f1 = f1_score(y_train, y_train_pred, pos_label='M')
+
+# Print the results
+print(f"Training Precision: {train_precision:.2f}")
+print(f"Training Recall: {train_recall:.2f}")
+print(f"Training F1-Score: {train_f1:.2f}")
+
+# Confusion Matrix for Training Data
+train_confusion = confusion_matrix(y_train, y_train_pred)
+print("Training Confusion Matrix:")
+print(train_confusion)
+
+# Confusion Matrix for Training Data
+train_confusion = confusion_matrix(y_train, y_train_pred)
+sns.heatmap(train_confusion, annot=True, fmt="g", cmap="Blues")
+plt.xlabel('Predicted labels')
+plt.ylabel('True labels')
+plt.title('Confusion Matrix for Training Data')
+plt.show()
+
+print(classification_report(y_train, y_train_pred))
+
+
+# Predicting on the Testing Data
+y_test_pred = gnb.predict(X_test_scaled)
+
+y_test = cleaned_shoe_data["POSSIBLE OWNER (SEX)"]
+test_accuracy = accuracy_score(y_test, y_test_pred)
+print(f"Testing Accuracy: {test_accuracy:.2f}")
+
+# Confusion Matrix for Testing Data
+test_confusion = confusion_matrix(y_test, y_test_pred)
+TP = test_confusion[1, 1]
+TN = test_confusion[0, 0]
+FP = test_confusion[0, 1]
+FN = test_confusion[1, 0]
+
+# Compute metrics
+precision = TP / (TP + FP)
+recall = TP / (TP + FN)
+f1 = 2 * (precision * recall) / (precision + recall)
+
+print(f"The model achieved an accuracy of {test_accuracy*100:.2f}% on the test data.")
+print(f"The precision of the model on the test data is {precision*100:.2f}%.")
+print(f"The recall (or sensitivity) of the model on the test data is {recall*100:.2f}%.")
+print(f"The F1-score of the model on the test data is {f1:.2f}.")
+
+# Plotting the confusion matrix
+sns.heatmap(test_confusion, annot=True, fmt="g", cmap="Blues")
+plt.xlabel('Predicted labels')
+plt.ylabel('True labels')
+plt.title('Confusion Matrix for Testing Data')
+plt.show()
+
+#####With Threshold 0.1, 0.5, 0.6, 0.4
+
+y_test = cleaned_shoe_data["POSSIBLE OWNER (SEX)"].map({'F': 0, 'M': 1})
+
+y_test_probs = gnb.predict_proba(X_test_scaled)[:, 1]  # probabilities for the positive class (Male)
+
+def classify_with_threshold(probabilities, threshold):
+    return [1 if prob > threshold else 0 for prob in probabilities]
+
+best_threshold = 0.5
+best_accuracy = 0
+
+thresholds = [i * 0.01 for i in range(100)]
+for threshold in thresholds:
+    y_test_threshold_pred = classify_with_threshold(y_test_probs, threshold)
+    accuracy = accuracy_score(y_test, y_test_threshold_pred)
+    if accuracy > best_accuracy:
+        best_accuracy = accuracy
+        best_threshold = threshold
+
+y_test_threshold_pred = classify_with_threshold(y_test_probs, best_threshold)
+
+test_accuracy = accuracy_score(y_test, y_test_threshold_pred)
+print(f"Testing Accuracy with Best Threshold ({best_threshold}): {test_accuracy:.2f}")
+
+test_confusion = confusion_matrix(y_test, y_test_threshold_pred)
+TP = test_confusion[1, 1]
+TN = test_confusion[0, 0]
+FP = test_confusion[0, 1]
+FN = test_confusion[1, 0]
+
+precision = TP / (TP + FP)
+recall = TP / (TP + FN)
+f1 = 2 * (precision * recall) / (precision + recall)
+
+print(f"The model achieved an accuracy of {test_accuracy*100:.2f}% on the test data.")
+print(f"The precision of the model on the test data is {precision*100:.2f}%.")
+print(f"The recall (or sensitivity) of the model on the test data is {recall*100:.2f}%.")
+print(f"The F1-score of the model on the test data is {f1:.2f}.")
+
+sns.heatmap(test_confusion, annot=True, fmt="g", cmap="Blues")
+plt.xlabel('Predicted labels')
+plt.ylabel('True labels')
+plt.title('Confusion Matrix for Testing Data with Best Threshold')
+plt.show()
+
+##### Learning curve######
+
+from sklearn.model_selection import learning_curve
+
+def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None, n_jobs=None, train_sizes=np.linspace(.1, 1.0, 5)):
+    plt.figure()
+    plt.title(title)
+    if ylim is not None:
+        plt.ylim(*ylim)
+    plt.xlabel("Training examples")
+    plt.ylabel("Score")
+    train_sizes, train_scores, test_scores = learning_curve(
+        estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes)
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+    plt.grid()
+
+    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
+                     train_scores_mean + train_scores_std, alpha=0.1,
+                     color="r")
+    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
+                     test_scores_mean + test_scores_std, alpha=0.1, color="g")
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+             label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+             label="Cross-validation score")
+
+    plt.legend(loc="best")
+    return plt
+
+title = "Learning Curves (GaussianNB)"
+cv = 5 # Number of cross-validation folds
+plot_learning_curve(gnb, title, X_train_scaled, y_train, cv=cv, n_jobs=4)
+plt.show()
+
+#### Distribution of sex ####
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+sns.countplot(x="POSSIBLE OWNER (SEX)", data=cleaned_shoe_data, ax=axes[0])
+axes[0].set_title('Before Testing')
+axes[0].set_ylabel('Count')
+for p in axes[0].patches:
+    height = p.get_height()
+    axes[0].text(p.get_x()+p.get_width()/2., height + 0.3, '{}'.format(height), ha="center") 
+
+sns.countplot(x=y_test_pred, ax=axes[1])  # Assuming y_test_pred is the variable storing your predictions
+axes[1].set_title('After Testing with 0.5 threshold')
+axes[1].set_ylabel('Count')
+for p in axes[1].patches:
+    height = p.get_height()
+    axes[1].text(p.get_x()+p.get_width()/2., height + 0.3, '{}'.format(height), ha="center") 
+
+plt.tight_layout()
+
+
+
+og_shoe['POSSIBLE OWNER (SEX)'] = og_shoe['POSSIBLE OWNER (SEX)'].fillna('Unknown')
+
+y_og_shoe_pred = gnb.predict(X_og_shoe_scaled)
+
+original_counts = og_shoe['POSSIBLE OWNER (SEX)'].value_counts()
+
+y_og_shoe_mapped = []
+for i, orig in enumerate(og_shoe['POSSIBLE OWNER (SEX)']):
+    if orig == 'Unknown':
+        y_og_shoe_mapped.append('M' if y_og_shoe_pred[i] == 1 else 'F')
+    else:
+        y_og_shoe_mapped.append(orig)
+
+predicted_counts = pd.Series(y_og_shoe_mapped).value_counts()
+
+fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+sns.countplot(data=og_shoe, x='POSSIBLE OWNER (SEX)', order=['M', 'F', 'Unknown'], ax=ax[0])
+ax[0].set_title('Before testing')
+ax[0].set_ylabel('Count')
+
+for p in ax[0].patches:
+    ax[0].annotate(f'{p.get_height()}', (p.get_x() + p.get_width() / 2., p.get_height()), 
+                   ha='center', va='center', xytext=(0, 10), textcoords='offset points')
+
+sns.countplot(y_og_shoe_pred, order=['M', 'F', 'Unknown'], ax=ax[1])
+ax[1].set_title('Predicted Distribution (Without Threshold Adjustment)')
+ax[1].set_xlabel
+ax[1].set_ylabel('Count')
+
+for p in ax[1].patches:
+    ax[1].annotate(f'{p.get_height()}', (p.get_x() + p.get_width() / 2., p.get_height()), 
+                   ha='center', va='center', xytext=(0, 10), textcoords='offset points')
+
+plt.tight_layout()
+plt.show()
+
+###Roc curve###
+
+plt.figure(figsize=(10, 7))
+plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.legend(loc='lower right')
+plt.grid(alpha=0.2)
+plt.show()
+
+
+
