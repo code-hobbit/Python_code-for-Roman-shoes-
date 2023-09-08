@@ -452,7 +452,6 @@ for key, value in female_outliers.items():
 
 
 
-
 X = final_balanced_df[columns_to_check].drop(columns='Average BAB index')
 y = final_balanced_df['Average BAB index']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -565,6 +564,24 @@ for i, (feature_balanced, feature_shoe) in enumerate(column_mapping.items()):
 axes[-1].axis("off")
 plt.tight_layout()
 plt.show()
+
+##############Stature calculations#################
+
+factor = 6.6
+constant = 60
+
+final_balanced_df['Estimated_Stature'] = final_balanced_df['Average Foot Length'] * factor + constant
+cleaned_shoe_data['Estimated_Stature'] = cleaned_shoe_data['INSOLE LENGTH'] * factor + constant
+
+mean_stature_footprint = final_balanced_df['Estimated_Stature'].mean()
+std_stature_footprint = final_balanced_df['Estimated_Stature'].std()
+
+mean_stature_shoe = cleaned_shoe_data['Estimated_Stature'].mean()
+std_stature_shoe = cleaned_shoe_data['Estimated_Stature'].std()
+
+print(f'Footprint Data - Mean Estimated Stature: {mean_stature_footprint}, Standard Deviation: {std_stature_footprint}')
+print(f'Shoe Data - Mean Estimated Stature: {mean_stature_shoe}, Standard Deviation: {std_stature_shoe}')
+
 
 #####################Model Training####################
 
